@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PipelineBuildEvent xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
-  <SourceFile>C:/Users/will/MainFiles/MyProjects2020/SphereMapExample/Content/hdr_colorful_studio_2k.hdr</SourceFile>
-  <SourceTime>2020-10-19T07:16:20.9926929-04:00</SourceTime>
-  <DestFile>C:/Users/will/MainFiles/MyProjects2020/SphereMapExample/Content/bin/Windows/Content/hdr_colorful_studio_2k.xnb</DestFile>
-  <DestTime>2020-12-09T10:29:02.6779439-05:00</DestTime>
+  <SourceFile>C:/Users/Owner/GithubPrjs/SphereMapExample/Content/hdr_colorful_studio_2k.hdr</SourceFile>
+  <SourceTime>2020-12-29T03:38:11.2947055-05:00</SourceTime>
+  <DestFile>C:/Users/Owner/GithubPrjs/SphereMapExample/Content/bin/Windows/Content/hdr_colorful_studio_2k.xnb</DestFile>
+  <DestTime>2020-12-29T03:41:56.2250163-05:00</DestTime>
   <Importer>TextureImporter</Importer>
   <ImporterTime>2020-08-10T16:17:54-04:00</ImporterTime>
   <Processor>TextureProcessor</Processor>

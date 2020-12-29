@@ -4,12 +4,12 @@
   <Platform>Windows</Platform>
   <Config />
   <SourceFiles>
-    <File>C:/Users/will/MainFiles/MyProjects2020/SphereMapExample/Content/EarthHeightMap1280.jpg</File>
-    <File>C:/Users/will/MainFiles/MyProjects2020/SphereMapExample/Content/hdr_colorful_studio_2k.hdr</File>
-    <File>C:/Users/will/MainFiles/MyProjects2020/SphereMapExample/Content/Mars_MGS_MOLA_DEM_mosaic_global_1024.jpg</File>
-    <File>C:/Users/will/MainFiles/MyProjects2020/SphereMapExample/Content/Mercury_Messenger_DEM_Global_665m_1024.jpg</File>
-    <File>C:/Users/will/MainFiles/MyProjects2020/SphereMapExample/Content/TextureCubeBuildEffect.fx</File>
-    <File>C:/Users/will/MainFiles/MyProjects2020/SphereMapExample/Content/TextureCubeDrawEffect.fx</File>
+    <File>C:/Users/Owner/GithubPrjs/SphereMapExample/Content/EarthHeightMap1280.jpg</File>
+    <File>C:/Users/Owner/GithubPrjs/SphereMapExample/Content/hdr_colorful_studio_2k.hdr</File>
+    <File>C:/Users/Owner/GithubPrjs/SphereMapExample/Content/Mars_MGS_MOLA_DEM_mosaic_global_1024.jpg</File>
+    <File>C:/Users/Owner/GithubPrjs/SphereMapExample/Content/Mercury_Messenger_DEM_Global_665m_1024.jpg</File>
+    <File>C:/Users/Owner/GithubPrjs/SphereMapExample/Content/TextureCubeBuildEffect.fx</File>
+    <File>C:/Users/Owner/GithubPrjs/SphereMapExample/Content/TextureCubeDrawEffect.fx</File>
   </SourceFiles>
   <DestFiles>
     <File xsi:nil="true" />

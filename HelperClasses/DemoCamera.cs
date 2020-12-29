@@ -12,6 +12,10 @@ namespace Microsoft.Xna.Framework
 
     public class DemoCamera
     {
+        Vector3 nowPosition = Vector3.Zero;
+        Vector3 lastPosition = Vector3.Zero;
+        Vector3 targetPosition = Vector3.Zero;
+
         Vector3 _camPos = Vector3.Zero;
         Vector3 _targetLookAtPos = Vector3.One;
         Vector3 _forward = Vector3.Zero;
@@ -28,8 +32,9 @@ namespace Microsoft.Xna.Framework
         float _durationElapsed = 0f;
         float _durationInSeconds = 1f;
 
-        private Vector3[] wayPointReference;
-        MyImbalancedSpline wayPointCurvature;
+        private Vector4[] wayPointReference;
+
+        Curve_WeightedBezier wayPointCurve;
 
         public Matrix Projection { get { return _projection; } set { _projection = value; } }
         public Matrix View { get { return Matrix.Invert(_cameraWorld); } }
@@ -42,13 +47,16 @@ namespace Microsoft.Xna.Framework
         public float Far { get { return _far; } }
         public bool IsSpriteBatchStyled { get { return _spriteBatchStyle; } }
         public bool IsPerspectiveStyled { get { return _perspectiveStyle; } }
+        public bool UseForwardPathLook { get; set; }
+        public bool UseWayPointMotion { get; set; }
         public float WayPointCycleDurationInTotalSeconds { get { return _durationInSeconds; } set { _durationInSeconds = value; } }
         public float LookAtSpeedPerSecond { get; set; } = 1f;
         public float MovementSpeedPerSecond { get; set; } = 1f;
-        public void SetWayPoints(Vector3[] waypoints, bool connectEnds, int numberOfSegments)
+
+        public void SetWayPoints(Vector4[] waypoints,  bool connectEnds, bool isUniformed, int numberOfSegments)
         {
             wayPointReference = waypoints;
-            wayPointCurvature.SetWayPoints(waypoints, numberOfSegments, connectEnds);
+            wayPointCurve = new Curve_WeightedBezier(waypoints, numberOfSegments, connectEnds, isUniformed);
         }
 
         /// <summary>
@@ -57,7 +65,7 @@ namespace Microsoft.Xna.Framework
         public DemoCamera(GraphicsDevice device, SpriteBatch spriteBatch, Texture2D dot, Vector3 pos, Vector3 target, Vector3 up, float nearClipPlane, float farClipPlane, float fieldOfView, bool perspective, bool spriteBatchStyled, bool inverseOthographicProjection)
         {
             DrawHelpers.Initialize(device, spriteBatch, dot);
-            wayPointCurvature = new MyImbalancedSpline();
+            //wayPointCurvature = new MyImbalancedSpline();
             TransformCamera(pos, target, up);
             SetProjection(device, nearClipPlane, farClipPlane, fieldOfView, perspective, spriteBatchStyled, inverseOthographicProjection);
         }
@@ -65,11 +73,11 @@ namespace Microsoft.Xna.Framework
         /// <summary>
         /// If waypoints are present then and automatedCameraMotion is set to true the cinematic camera will execute.
         /// </summary>
-        public void Update(Vector3 targetPosition, bool automatedCameraMotion, GameTime gameTime)
+        public void Update(Vector3 targetPosition, GameTime gameTime)
         {
-            if (automatedCameraMotion && wayPointReference != null)
-                CurveThruWayPoints(targetPosition, wayPointReference, gameTime);
-            else
+            //if (automatedCameraMotion && wayPointReference != null)
+            //    CurveThruWayPoints(targetPosition, wayPointReference, gameTime);
+            //else
                 UpdateCameraUsingDefaultKeyboardCommands(gameTime);
         }
 
@@ -109,12 +117,38 @@ namespace Microsoft.Xna.Framework
             if (Keyboard.GetState().IsKeyDown(Keys.Z))
                 RollCounterClockwise(MovementSpeedPerSecond * elapsed);
 
-            // transform
-            TransformCamera(_cameraWorld.Translation, _cameraWorld.Forward + _cameraWorld.Translation, _cameraWorld.Up);
+            CurveThruWayPoints(gameTime);
+
+            //// transform
+            //TransformCamera(_cameraWorld.Translation, _cameraWorld.Forward + _cameraWorld.Translation, _cameraWorld.Up);
+        }
+
+        public void CurveThruWayPoints(GameTime gameTime)
+        {
+            _durationElapsed += (float)gameTime.ElapsedGameTime.TotalSeconds;
+            if (_durationElapsed >= WayPointCycleDurationInTotalSeconds)
+                _durationElapsed -= WayPointCycleDurationInTotalSeconds;
+
+            float timeOnCurve = _durationElapsed / WayPointCycleDurationInTotalSeconds;
+
+            lastPosition = nowPosition;
+
+            if (UseWayPointMotion)
+                nowPosition = ToVector3(wayPointCurve.GetUniformSplinePoint(timeOnCurve));
+            else
+                nowPosition = _cameraWorld.Translation;
+
+            if (UseForwardPathLook)
+                targetPosition = nowPosition - lastPosition + nowPosition;
+            else
+                targetPosition = _cameraWorld.Forward + nowPosition; //_cameraWorld.Translation;
+
+            TransformCamera(nowPosition, targetPosition, _camUp);
         }
 
         public void TransformCamera(Vector3 pos, Vector3 target, Vector3 up)
         {
+            
             _targetLookAtPos = target;
             _camPos = pos;
             _camUp = up;
@@ -240,18 +274,6 @@ namespace Microsoft.Xna.Framework
             return result;
         }
 
-        public void CurveThruWayPoints(Vector3 targetPosition, Vector3[] waypoints, GameTime gameTime)
-        {
-            _durationElapsed += (float)gameTime.ElapsedGameTime.TotalSeconds;
-            if (_durationElapsed >= WayPointCycleDurationInTotalSeconds)
-                _durationElapsed -= WayPointCycleDurationInTotalSeconds;
-
-            float timeOnCurve = _durationElapsed / WayPointCycleDurationInTotalSeconds;
-            var p = wayPointCurvature.GetPointOnCurveAtTime(timeOnCurve);
-
-            TransformCamera(p, targetPosition, _camUp);
-        }
-
         /// <summary>
         /// Moves the camera thru paths in straight lines from point to point.
         /// </summary>
@@ -283,7 +305,7 @@ namespace Microsoft.Xna.Framework
         /// <param name="gameTime"></param>
         public void DrawCurveThruWayPointsWithSpriteBatch(float scale, Vector3 offset, int PlaneOption, GameTime gameTime)
         {
-            if (wayPointCurvature != null)
+            if (wayPointCurve != null)
             {
                 Vector2 offset2d = Get2dVectorAxisElements(offset, PlaneOption);
                 // current 2d camera position and forward on the orthographic xy plane.
@@ -316,12 +338,19 @@ namespace Microsoft.Xna.Framework
                 DrawHelpers.DrawBasicLine(drawnCamIteratedOffsetPos, drawCamForwardRayEndPoint, 1, Color.Yellow);
 
                 // draw curved segmented output.
-                var curveLineSegments = wayPointCurvature.GetCurveLineSegments;
-                for (int i = 0; i < curveLineSegments.Count; i++)
+                var loopAdjustment = 1;
+                if (wayPointCurve._closedControlPoints)
+                    loopAdjustment = 0;
+                var curveLineSegments = wayPointCurve.curveLinePoints;
+                for (int i = 0; i < curveLineSegments.Length - loopAdjustment; i++)
                 {
-                    var segment = curveLineSegments[i];
-                    var start = Get2dVectorAxisElements(segment.Start, PlaneOption) * scale + offset2d;
-                    var end = Get2dVectorAxisElements(segment.End, PlaneOption) * scale + offset2d;
+                    int i2 = i + 1;
+                    if (i2 >= curveLineSegments.Length)
+                        i2 = i2 - curveLineSegments.Length;
+                    var segment = ToVector3( curveLineSegments[i] );
+                    var segment2 = ToVector3( curveLineSegments[i2] );
+                    var start = Get2dVectorAxisElements(segment, PlaneOption) * scale + offset2d;
+                    var end = Get2dVectorAxisElements(segment2, PlaneOption) * scale + offset2d;
 
                     if (i % 2 == 0)
                         DrawHelpers.DrawBasicLine(start, end, 1, Color.Black);
@@ -332,7 +361,7 @@ namespace Microsoft.Xna.Framework
                 // Draw current 2d waypoint positions on the orthographic xy plane.
                 foreach (var p in wayPointReference)
                 {
-                    var waypointPos = Get2dVectorAxisElements(p, PlaneOption) * scale + offset2d;
+                    var waypointPos = Get2dVectorAxisElements(ToVector3( p ), PlaneOption) * scale + offset2d;
                     GetIndividualCrossHairVectors(waypointPos, 4, out drawCrossHairLeft, out drawCrossHairRight, out drawCrossHairUp, out drawCrossHairDown);
                     DrawHelpers.DrawBasicLine(drawCrossHairLeft, drawCrossHairRight, 1, Color.DarkGray);
                     DrawHelpers.DrawBasicLine(drawCrossHairUp, drawCrossHairDown, 1, Color.DarkGray);
@@ -370,6 +399,11 @@ namespace Microsoft.Xna.Framework
                 return new Vector2(v.Y, v.Z);
             }
             return new Vector2(v.X, v.Y);
+        }
+
+        public Vector3 ToVector3(Vector4 v)
+        {
+            return new Vector3(v.X, v.Y, v.Z);
         }
 
         public void MoveForwardLocally(float amount)
@@ -550,206 +584,443 @@ namespace Microsoft.Xna.Framework
         }
     }
 
-    public class MyImbalancedSpline
+
+
+    //+++++++++++++++++++++++++++++++++++++++++++++++
+    //+++++++++++++++++++++++++++++++++++++++++++++++
+
+
+    public class Curve_WeightedBezier
     {
-        int order = 2;
-        int curveSegmentsEndIndex = 0;
-        int curveLineSegmentsLength = 0;
-        int cpEndIndex = 0;
-        float segmentsSummedDistance = 0f;
-        Vector4[] cp;
-        List<LineSegment> curveLineSegments = new List<LineSegment>();
-        List<LineSegment> curveUniformedLineSegments = new List<LineSegment>();
-        List<float> curveLineSegmentLength = new List<float>();
+        public bool _showTangents = false;
 
-        bool ConnectedEnds { get; set; } = false;
-        float DefaultWeight { get; set; } = 2.0f;
-        public List<LineSegment> GetCurveLineSegments { get { return curveLineSegments; } }
-        public List<LineSegment> GetCurveLineUniformedSegments { get { return curveUniformedLineSegments; } }
+        #region  non requisite optional astetic visual values.
+        //List<Vector3> artificialCpLine = new List<Vector3>();
+        //List<Vector3> artificialTangentLine = new List<Vector3>();
+        #endregion
 
-        public void SetWayPoints(Vector3[] controlPoints, int segmentCount, bool connectedEnds)
+        #region  temporary tracking values used thruout many methods as the curves are processed.
+        int currentCpIndex = 0;
+        int index0 = 0;
+        int index1 = 0;
+        int index2 = 0;
+        int index3 = 0;
+        #endregion
+
+
+        /// <summary>
+        /// This holds the information relating to the control points given or that will be calculated.
+        /// </summary>
+        ControlPoint[] cps;
+        /// <summary>
+        /// these are the reslting generated NonUniform timed or Uniformly timed line points.
+        /// </summary>
+        public Vector4[] curveLinePoints;
+        /// <summary>
+        /// when set to true or closed this will loop the last point to curve round to the first and the curve will be a loop.
+        /// when set to false the end points will be doubled in the algorithm to calculate the clamping for the first and last curve ending segments.
+        /// </summary>
+        public bool _closedControlPoints = true;
+        /// <summary>
+        /// when uniformed is true the resulting curve will be made with uniformly spaced positions and the timed traversal rate across the curve will be smooth.
+        /// </summary>
+        public bool _uniformedCurve = true;
+        /// <summary>
+        /// the number of timed points generated along the entire curve
+        /// </summary>
+        public int _numOfCurvatureSegmentPoints = 100;
+        /// <summary>
+        /// the higher this number the more refined the timing along the curve will be and the more time it will take to calculate it.
+        /// </summary>
+        public int _numberOfIntigrationStepsPerSegment = 10;
+        /// <summary>
+        /// Not yet implemented ... this value acts as a scalar on all weights.
+        /// </summary>
+        private float _globalWeight = 1.0f;
+
+        float totaldist = 0;
+
+        /// <summary>
+        /// the calculated total integrated distance of the curve.
+        /// </summary>
+        public float TotalCurveDistance { get { return totaldist; } }
+
+
+
+        #region constructors
+
+        /// <summary>
+        /// </summary>
+        public Curve_WeightedBezier(Vector4[] controlPoints)
         {
-            cp = new Vector4[controlPoints.Length];
-            for (int i = 0; i < controlPoints.Length; i++)
-                cp[i] = new Vector4(controlPoints[i].X, controlPoints[i].Y, controlPoints[i].Z, 1.0f);
-            SetCommon(controlPoints.Length, segmentCount, connectedEnds);
+            CreateSpline(controlPoints);
         }
-        public void SetWayPoints(Vector4[] controlPoints, int segmentCount, bool connectedEnds)
+
+        /// <summary>
+        /// </summary>
+        public Curve_WeightedBezier(Vector4[] controlPoints, int numOfVisualCurvatureSegmentPoints, bool closedControlPoints, bool uniformedCurve)
         {
-            cp = new Vector4[controlPoints.Length];
-            for (int i = 0; i < controlPoints.Length; i++)
-                cp[i] = new Vector4(controlPoints[i].X, controlPoints[i].Y, controlPoints[i].Z, controlPoints[i].W);
-            SetCommon(controlPoints.Length, segmentCount, connectedEnds);
+            _closedControlPoints = closedControlPoints;
+            _uniformedCurve = uniformedCurve;
+            _numOfCurvatureSegmentPoints = numOfVisualCurvatureSegmentPoints;
+            CreateSpline(controlPoints);
         }
 
-        private void SetCommon(int controlPointsLen, int segmentCount, bool connectedEnds)
+        /// <summary>
+        /// 
+        /// </summary>
+        public Curve_WeightedBezier(Vector4[] controlPoints, int numOfVisualCurvatureSegmentPoints, bool closedControlPoints, bool uniformedCurve, float globalWeight, bool showTangents)
         {
-            order = 2;
-            ConnectedEnds = connectedEnds;
-            if (ConnectedEnds)
+            _closedControlPoints = closedControlPoints;
+            _uniformedCurve = uniformedCurve;
+            _globalWeight = globalWeight;
+            _numOfCurvatureSegmentPoints = numOfVisualCurvatureSegmentPoints;
+            _showTangents = showTangents;
+            CreateSpline(controlPoints);
+        }
+
+        #endregion
+
+        #region curve calculation methods
+
+        private void CreateSpline(Vector4[] controlPoints)
+        {
+            //artificialCpLine.Clear();
+            //artificialTangentLine.Clear();
+            cps = new ControlPoint[controlPoints.Length];
+            for (int i = 0; i < controlPoints.Length; i++)
             {
-                curveSegmentsEndIndex = segmentCount;
-                curveLineSegmentsLength = segmentCount + 1;  //controlPointsLen;
-                cpEndIndex = controlPointsLen; // we can do this provided we Ensure Wrapped Index adustments occur per index.
+                var cpInstance = new ControlPoint();
+                cpInstance.position = new Vector3(controlPoints[i].X, controlPoints[i].Y, controlPoints[i].Z);
+                cpInstance.weight = controlPoints[i].W;
+                cpInstance.cpIndex = i;
+                cps[i] = cpInstance;
+            }
+
+            FindCpLengthsAndIntegratedTotalCurveLength();
+
+            curveLinePoints = new Vector4[_numOfCurvatureSegmentPoints];
+
+            var loopCount = _numOfCurvatureSegmentPoints;
+            var divisor = loopCount - 1;
+
+            // Create the curve either uniformed or non uniformed.
+            if (_uniformedCurve)
+            {
+                for (int i = 0; i < loopCount; i++)
+                {
+                    float t = (float)(i) / (float)(divisor);
+                    curveLinePoints[i] = GetUniformSplinePoint(t);
+                }
             }
             else
             {
-                curveSegmentsEndIndex = segmentCount - 1;
-                curveLineSegmentsLength = segmentCount;  //controlPointsLen;
-                cpEndIndex = controlPointsLen - 1;
-            }
-            BuildCurve();
-        }
-
-        public Vector3 GetPointOnCurveAtTime(float timeOnCurve)
-        {
-            return CalculatePointOnCurveAtTime(timeOnCurve);
-        }
-
-        public void BuildCurve()
-        {
-            Vector3[] curve = new Vector3[curveLineSegmentsLength];
-            for (int i = 0; i < curveLineSegmentsLength; i++)
-            {
-                float timeOnLine = (float)(i) / (float)(curveSegmentsEndIndex);
-                curve[i] = CalculatePointOnCurveAtTime(timeOnLine);
-            }
-            // calculate segment lengths
-            for (int i = 0; i < curveSegmentsEndIndex; i++)
-            {
-                var dist = Vector3.Distance(curve[i], curve[i + 1]);
-                segmentsSummedDistance += dist;
-                curveLineSegmentLength.Add(dist);
-            }
-            // set the vertexs
-            for (int i = 0; i < curveSegmentsEndIndex; i++)
-            {
-                curveLineSegments.Add(new LineSegment(curve[i], curve[i + 1]));
+                for (int i = 0; i < loopCount; i++)
+                {
+                    float t = (float)(i) / (float)(divisor);
+                    curveLinePoints[i] = GetNonUniformSplinePoint(t);
+                }
             }
         }
 
-        private Vector3 CalculatePointOnCurveAtTime(float interpolationAmountOnCurve)
+        public void FindCpLengthsAndIntegratedTotalCurveLength()
         {
-            //int order = 2;
-            //int segLei = curveLineLodCount - 1;
-            //int cpLei = cp.Length - 1;
-            float i = interpolationAmountOnCurve * (curveSegmentsEndIndex);
+            var loopCount = cps.Length;
+            var divisor = loopCount - 1;
 
-            // calculate curvature moments on the line.
-            float t = (float)(i) / (float)((float)(curveSegmentsEndIndex) + 0.00001f);
-            float cpit = (float)(cpEndIndex) * t; // cp index time.
-            float cpt = Frac(cpit); // cp fractional time
-            int cpi = (int)(cpit); // cp primary index.
+            var lastPos = cps[0].position;
+            totaldist = 0;
+            float prevTotalDist = 0;
 
-            // caluclate conditional cp indexs at the moments
-            int index0 = EnsureIndexInRange(cpi - 1);
-            int index1 = EnsureIndexInRange(cpi + 0);
-            int index2 = EnsureIndexInRange(cpi + 1);
-            int index3 = EnsureIndexInRange(cpi + 2);
+            var integrateStepAmount = 1f / _numberOfIntigrationStepsPerSegment;
+            for (int cptomeasure = 0; cptomeasure < loopCount; cptomeasure++)
+            {
+                float cpToNextCpDistance = 0;
+                for (float time = 0f; time < integrateStepAmount + 000001f; time += integrateStepAmount)
+                {
+                    var nowPosition = DetermineSplinesAndGetPointOnCurve(cptomeasure, time); // what we get here is the raw tangental splined point by the polynominal.
+                    if (time > 0f)
+                    {
+                        var dist = Vector3.Distance(nowPosition, lastPos);
+                        if (nowPosition != lastPos)
+                            cpToNextCpDistance += dist;
+                    }
+                    lastPos = nowPosition;
+                }
 
-            Vector3 plot = new Vector3();
-            if ((cpi <= (cpEndIndex - order) && cpi >= 1) || ConnectedEnds) // middle
-                plot = ToVector3(CalculateInnerCurvePoint(cp[index0], cp[index1], cp[index2], cp[index3], cpt));
+                prevTotalDist = totaldist;
+                if (_closedControlPoints == false && cptomeasure == loopCount - 1)
+                    cpToNextCpDistance = 0;
+                else
+                    totaldist += cpToNextCpDistance;
+
+                cps[cptomeasure].startDistance = prevTotalDist;
+                cps[cptomeasure].distanceToNextCp = cpToNextCpDistance;
+            }
+        }
+
+        public Vector4 GetNonUniformSplinePoint(float Time)
+        {
+            int resultIndex = 0;
+            float fractionalTime = 0;
+            if (_closedControlPoints)
+            {
+                var plotRange = cps.Length;
+                var offset = plotRange * Time;
+                resultIndex = (int)(offset);
+                fractionalTime = offset - (float)resultIndex;
+            }
             else
             {
-                if (cpi < 1) // begining
-                    plot = ToVector3(CalculateBeginingCurvePoint(cp[index1], cp[index2], cp[index3], cpt));
-                else // if (cpi > (cpLei - order)) // end
-                    plot = ToVector3(CalculateEndingCurvePoint(cp[index0], cp[index1], cp[index2], cpt));
+                var plotRange = cps.Length - 1;
+                var offset = plotRange * Time;
+                resultIndex = (int)(offset);
+                fractionalTime = offset - (float)resultIndex;
             }
-            return plot;
+            var p = DetermineSplinesAndGetPointOnCurve(resultIndex, fractionalTime);
+            var w = (cps[index2].weight - cps[index1].weight) * fractionalTime + cps[index1].weight;
+            Vector4 result = new Vector4(p.X, p.Y, p.Z, w);
+            return result;
         }
 
+        public Vector4 GetUniformSplinePoint(float time)
+        {
+            int resultIndex = 0;
+            float fractionalTime = 0;
+            float currentDistance = time * totaldist;
+            if (_closedControlPoints)
+            {
+                int i = 0;
+                while (i < cps.Length)
+                {
+                    var start = cps[i].startDistance;
+                    var end = start + cps[i].distanceToNextCp;
+                    if (currentDistance >= start && currentDistance <= end)
+                    {
+                        resultIndex = i;
+                        var len = end - start;
+                        fractionalTime = (currentDistance - start) / len;
+                        if (fractionalTime > 1f)
+                            fractionalTime = 1f;
+                        i = cps.Length; // break
+                    }
+                    i++;
+                }
+            }
+            else
+            {
+                int i = 0;
+                while (i < cps.Length)
+                {
+                    var start = cps[i].startDistance;
+                    var end = start + cps[i].distanceToNextCp;
+                    if (currentDistance >= start && currentDistance <= end)
+                    {
+                        resultIndex = i;
+                        var len = end - start;
+                        fractionalTime = (currentDistance - start) / len;
+                        if (fractionalTime > 1f)
+                            fractionalTime = 1f;
+                        i = cps.Length; // break
+                    }
+                    i++;
+                }
+            }
+            var p = DetermineSplinesAndGetPointOnCurve(resultIndex, fractionalTime);
+            var w = (cps[index2].weight - cps[index1].weight) * fractionalTime + cps[index1].weight;
+            Vector4 result = new Vector4(p.X, p.Y, p.Z, w);
+            return result;
+        }
+
+        private Vector3 DetermineSplinesAndGetPointOnCurve(int cpIndex, float fracTime)
+        {
+            if (_closedControlPoints || (cpIndex > 0 && cpIndex < cps.Length - 2))
+            {
+                // caluclate conditional cp indexs at the moments
+                index0 = EnsureIndexInRange(cpIndex - 1);
+                index1 = EnsureIndexInRange(cpIndex + 0);//<
+                index2 = EnsureIndexInRange(cpIndex + 1);
+                index3 = EnsureIndexInRange(cpIndex + 2);
+            }
+            else
+            {
+                if (cpIndex == 0)
+                {
+                    index0 = EnsureIndexInRange(cpIndex + 0);
+                    index1 = EnsureIndexInRange(cpIndex + 0);//<<
+                    index2 = EnsureIndexInRange(cpIndex + 1);
+                    index3 = EnsureIndexInRange(cpIndex + 2);
+                }
+                if (cpIndex >= cps.Length - 2)
+                {
+                    index0 = EnsureIndexInRange(cpIndex - 1);
+                    index1 = EnsureIndexInRange(cpIndex + 0); // <<
+                    index2 = EnsureIndexInRange(cpIndex + 1);
+                    index3 = EnsureIndexInRange(cpIndex + 1);
+                }
+            }
+            currentCpIndex = index1;
+            return GetSegmentsTangentalWeightedPoint(cps[index0].position, cps[index1].position, cps[index2].position, cps[index3].position, fracTime);
+        }
         public int EnsureIndexInRange(int i)
         {
             while (i < 0)
-                i = (cp.Length) + i;
-            while (i > (cp.Length - 1))
-                i = i - (cp.Length);
+                i = i + (cps.Length);
+            while (i > (cps.Length - 1))
+                i = i - (cps.Length);
             return i;
         }
 
-        Vector4 CalculateBeginingCurvePoint(Vector4 a0, Vector4 a1, Vector4 a2, float time)
-        {
-            return GetPointAtTimeOn2ndDegreePolynominalCurve(a0, a1, a2, (float)(time * .5f));
-        }
-        // ending segment
-        Vector4 CalculateEndingCurvePoint(Vector4 a0, Vector4 a1, Vector4 a2, float time)
-        {
-            return GetPointAtTimeOn2ndDegreePolynominalCurve(a0, a1, a2, (float)(time * .5f + .5f));
-        }
-        // middle segments
-        Vector4 CalculateInnerCurvePoint(Vector4 a0, Vector4 a1, Vector4 a2, Vector4 a3, float time)
-        {
-            Vector4 b0 = a1; Vector4 b1 = a2; Vector4 b2 = a3;
-            Vector4 a = GetPointAtTimeOn2ndDegreePolynominalCurve(a0, a1, a2, (float)(time * .5f + .5f));
-            Vector4 b = GetPointAtTimeOn2ndDegreePolynominalCurve(b0, b1, b2, (float)(time * .5f));
-            return (a * (1f - time) + b * time);
-        }
-
-        /* primary calculations */
-
         /// <summary>
-        /// This is a specialized imbalanced function based on a 2nd degree polynominal function.
+        /// Here we go.
         /// </summary>
-        Vector4 GetPointAtTimeOn2ndDegreePolynominalCurve(Vector4 A, Vector4 B, Vector4 C, float t)
+        /// <returns></returns>
+        private Vector3 GetSegmentsTangentalWeightedPoint(Vector3 v0, Vector3 v1, Vector3 v2, Vector3 v3, float time)
         {
-            //Calculate Artificial Spline Point
-            var S = (((B - C) + B) + ((B - A) + B)) * .5f;
-            //var S = CalculateProportionalArtificialSplinePoint(A, B, C); // original
-            //var S = CalculateNormalizedArtificialSplinePoint(A, B, C);
-            float i = 1.0f - t;
-            Vector4 plot = A * (i * i) + S * 2f * (i * t) + C * (t * t);
-            // linear
-            Vector4 plot2 = new Vector4();
-            if (t <= .5f)
-                plot2 = A + (B - A) * (t * 2f);
-            else
-                plot2 = B + (C - B) * ((t - .5f) * 2f);
-            // below 1 the curve begins to straighten.
-            plot.W = DefaultWeight;
-            Vector4 finalPlot = (plot * (plot2.W)) + (plot2 * (1f - plot2.W));
-            return finalPlot;
+            Vector3 p0 = v0; Vector3 p1 = v1; Vector3 p2 = v2; Vector3 p3 = v3;
+
+            var segmentDistance = Vector3.Distance(v2, v1) * 0.35355339f; // * _weight;
+
+            var n1 = Vector3.Normalize(GetIdealTangentVector(v0, v1, v2));
+            p1 = v1 + n1 * segmentDistance * cps[index1].weight;
+            p0 = v1;
+
+            var n2 = Vector3.Normalize(GetIdealTangentVector(v3, v2, v1));
+            p2 = v2 + n2 * segmentDistance * cps[index2].weight;
+            p3 = v2;
+
+            //float t = time * .33f + .33f;
+            float t = time;
+            float t2 = t * t;
+            float t3 = t2 * t;
+            float i = 1f - t;
+            float i2 = i * i;
+            float i3 = i2 * i;
+
+            Vector3 result =
+                (i3) * 1f * p0 +
+                (i2 * t) * 3f * p1 +
+                (i * t2) * 3f * p2 +
+                (t3) * 1f * p3;
+
+            //artificialCpLine.Add(p0);  // visualization stuff.
+            //artificialCpLine.Add(p1);
+            //artificialCpLine.Add(p2);
+            //artificialCpLine.Add(p3);
+
+            return result;
         }
 
-        Vector4 CalculateProportionalArtificialSplinePoint(Vector4 A, Vector4 B, Vector4 C)
+        public Vector3 GetIdealTangentVector(Vector3 a, Vector3 b, Vector3 c)
         {
-            return (((B - C) + B) + ((B - A) + B)) * .5f;
+            float disa = Vector3.Distance(a, b);
+            float disc = Vector3.Distance(b, c);
+            float ratioa = disa / (disa + disc);
+            var pAB = ((b - a) * ratioa) + a;
+            var pBC = ((c - b) * ratioa) + b;
+            var result = pBC - pAB;
+            // prevent nan later on.
+            if (result == Vector3.Zero)
+                result = c - a;
+
+            //artificialTangentLine.Add(pAB); // visualization stuff.
+            //artificialTangentLine.Add(pBC);
+
+            return result;
         }
 
-        // testing method
-        Vector4 CalculateNormalizedArtificialSplinePoint(Vector4 A, Vector4 B, Vector4 C)
+
+        #endregion
+
+        //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+        //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+        public void DrawWithSpriteBatch(SpriteBatch _spriteBatch, SpriteFont font, GameTime gameTime)
         {
-            Vector3 p0 = new Vector3(A.X, A.Y, A.Z);
-            Vector3 p1 = new Vector3(B.X, B.Y, B.Z);
-            Vector3 p2 = new Vector3(C.X, C.Y, C.Z);
-            //
-            Vector3 invtemp0 = (p1 - p2);// + p1;
-            Vector3 invtemp2 = (p1 - p0);// + p1;
-            float invdist0 = invtemp0.Length();
-            float invdist2 = invtemp2.Length();
-            float avgdist = (invdist0 + invdist2) * .5f;
-            invtemp0.Normalize();
-            invtemp2.Normalize();
-            //
-            invtemp0 = invtemp0 * (avgdist);
-            invtemp2 = invtemp2 * (avgdist);
-            Vector3 g = (invtemp0 + invtemp2) * .5f + p1;
-            return new Vector4(g.X, g.Y, g.Z, B.W);
+            DrawWithSpriteBatch(_spriteBatch, gameTime);
+
+            for (int i = 0; i < cps.Length; i++)
+            {
+                string msg =
+                    $" CP[{i}]  w: {cps[i].weight.ToString("0.000")}" +
+                    $"\n startDist: {cps[i].startDistance.ToString("###0.00")}" +
+                    $"\n segDist: {cps[i].distanceToNextCp.ToString("###0.00")}"
+                    ;
+                _spriteBatch.DrawString(font, msg, new Vector2(cps[i].position.X, cps[i].position.Y), Color.Black);
+            }
         }
 
-        float Interpolate(float v0, float v1, float timeX)
+        public void DrawWithSpriteBatch(SpriteBatch _spriteBatch, GameTime gameTime)
         {
-            return ((v1 - v0) * timeX + v0);
+            bool flip = false;
+            int lineThickness = 2;
+
+            //if (_showTangents)
+            //{
+            //    for (int i = 0; i < artificialCpLine.Count - 1; i += 2)
+            //    {
+            //        DrawHelpers.DrawBasicLine(new Vector2(artificialCpLine[i].X, artificialCpLine[i].Y), new Vector2(artificialCpLine[i + 1].X, artificialCpLine[i + 1].Y), 1, Color.Purple);
+            //    }
+
+            //    for (int i = 0; i < artificialCpLine.Count - 1; i += 2)
+            //    {
+            //        DrawHelpers.DrawBasicLine(new Vector2(artificialTangentLine[i].X, artificialTangentLine[i].Y), new Vector2(artificialTangentLine[i + 1].X, artificialTangentLine[i + 1].Y), 1, Color.Pink);
+            //    }
+            //}
+
+            for (int i = 0; i < cps.Length; i++)
+            {
+                DrawHelpers.DrawBasicPoint(new Vector2(cps[i].position.X, cps[i].position.Y), 4, Color.Red);
+            }
+
+            for (int i = 0; i < curveLinePoints.Length - 1; i++)
+            {
+                if (flip)
+                    DrawHelpers.DrawBasicLine(ToVector2(curveLinePoints[i]), ToVector2(curveLinePoints[i + 1]), lineThickness, Color.Green);
+                else
+                    DrawHelpers.DrawBasicLine(ToVector2(curveLinePoints[i]), ToVector2(curveLinePoints[i + 1]), lineThickness, Color.Black);
+
+                if (i < 1)
+                    DrawHelpers.DrawBasicLine(ToVector2(curveLinePoints[i]), ToVector2(curveLinePoints[i + 1]), lineThickness, Color.Yellow);
+
+                flip = !flip;
+            }
         }
-        float Frac(float n)
+
+        public Vector3 MidPoint(Vector3 a, Vector3 b)
         {
-            var i = (int)(n);
-            return n - (float)(i);
+            return (a + b) / 2;
         }
+        public Vector3 MidPoint(Vector3 a, Vector3 b, Vector3 c)
+        {
+            return (a + b + c) / 3;
+        }
+
         public Vector3 ToVector3(Vector4 v)
         {
             return new Vector3(v.X, v.Y, v.Z);
+        }
+        public Vector2 ToVector2(Vector3 v)
+        {
+            return new Vector2(v.X, v.Y);
+        }
+        public Vector2 ToVector2(Vector4 v)
+        {
+            return new Vector2(v.X, v.Y);
+        }
+
+        //++++++++++++++++++++++++++++++++++++++++++++++++++++++
+        // supporting class.
+        //++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+        public class ControlPoint
+        {
+            public Vector3 position = Vector3.Zero;
+            public float weight = 0;
+            public float distanceToNextCp = 0;
+            public float startDistance = 0;
+            public float ratio = 0;
+            public int cpIndex = 0;
         }
 
         public class LineSegment
@@ -762,5 +1033,222 @@ namespace Microsoft.Xna.Framework
                 End = end;
             }
         }
+
     }
 }
+
+
+
+//public class MyImbalancedSpline
+//{
+//    int order = 2;
+//    int curveSegmentsEndIndex = 0;
+//    int curveLineSegmentsLength = 0;
+//    int cpEndIndex = 0;
+//    float segmentsSummedDistance = 0f;
+//    Vector4[] cp;
+//    List<LineSegment> curveLineSegments = new List<LineSegment>();
+//    List<LineSegment> curveUniformedLineSegments = new List<LineSegment>();
+//    List<float> curveLineSegmentLength = new List<float>();
+
+//    bool ConnectedEnds { get; set; } = false;
+//    float DefaultWeight { get; set; } = 2.0f;
+//    public List<LineSegment> GetCurveLineSegments { get { return curveLineSegments; } }
+//    public List<LineSegment> GetCurveLineUniformedSegments { get { return curveUniformedLineSegments; } }
+
+//    public void SetWayPoints(Vector3[] controlPoints, int segmentCount, bool connectedEnds)
+//    {
+//        cp = new Vector4[controlPoints.Length];
+//        for (int i = 0; i < controlPoints.Length; i++)
+//            cp[i] = new Vector4(controlPoints[i].X, controlPoints[i].Y, controlPoints[i].Z, 1.0f);
+//        SetCommon(controlPoints.Length, segmentCount, connectedEnds);
+//    }
+//    public void SetWayPoints(Vector4[] controlPoints, int segmentCount, bool connectedEnds)
+//    {
+//        cp = new Vector4[controlPoints.Length];
+//        for (int i = 0; i < controlPoints.Length; i++)
+//            cp[i] = new Vector4(controlPoints[i].X, controlPoints[i].Y, controlPoints[i].Z, controlPoints[i].W);
+//        SetCommon(controlPoints.Length, segmentCount, connectedEnds);
+//    }
+
+//    private void SetCommon(int controlPointsLen, int segmentCount, bool connectedEnds)
+//    {
+//        order = 2;
+//        ConnectedEnds = connectedEnds;
+//        if (ConnectedEnds)
+//        {
+//            curveSegmentsEndIndex = segmentCount;
+//            curveLineSegmentsLength = segmentCount + 1;  //controlPointsLen;
+//            cpEndIndex = controlPointsLen; // we can do this provided we Ensure Wrapped Index adustments occur per index.
+//        }
+//        else
+//        {
+//            curveSegmentsEndIndex = segmentCount - 1;
+//            curveLineSegmentsLength = segmentCount;  //controlPointsLen;
+//            cpEndIndex = controlPointsLen - 1;
+//        }
+//        BuildCurve();
+//    }
+
+//    public Vector3 GetPointOnCurveAtTime(float timeOnCurve)
+//    {
+//        return CalculatePointOnCurveAtTime(timeOnCurve);
+//    }
+
+//    public void BuildCurve()
+//    {
+//        Vector3[] curve = new Vector3[curveLineSegmentsLength];
+//        for (int i = 0; i < curveLineSegmentsLength; i++)
+//        {
+//            float timeOnLine = (float)(i) / (float)(curveSegmentsEndIndex);
+//            curve[i] = CalculatePointOnCurveAtTime(timeOnLine);
+//        }
+//        // calculate segment lengths
+//        for (int i = 0; i < curveSegmentsEndIndex; i++)
+//        {
+//            var dist = Vector3.Distance(curve[i], curve[i + 1]);
+//            segmentsSummedDistance += dist;
+//            curveLineSegmentLength.Add(dist);
+//        }
+//        // set the vertexs
+//        for (int i = 0; i < curveSegmentsEndIndex; i++)
+//        {
+//            curveLineSegments.Add(new LineSegment(curve[i], curve[i + 1]));
+//        }
+//    }
+
+//    private Vector3 CalculatePointOnCurveAtTime(float interpolationAmountOnCurve)
+//    {
+//        //int order = 2;
+//        //int segLei = curveLineLodCount - 1;
+//        //int cpLei = cp.Length - 1;
+//        float i = interpolationAmountOnCurve * (curveSegmentsEndIndex);
+
+//        // calculate curvature moments on the line.
+//        float t = (float)(i) / (float)((float)(curveSegmentsEndIndex) + 0.00001f);
+//        float cpit = (float)(cpEndIndex) * t; // cp index time.
+//        float cpt = Frac(cpit); // cp fractional time
+//        int cpi = (int)(cpit); // cp primary index.
+
+//        // caluclate conditional cp indexs at the moments
+//        int index0 = EnsureIndexInRange(cpi - 1);
+//        int index1 = EnsureIndexInRange(cpi + 0);
+//        int index2 = EnsureIndexInRange(cpi + 1);
+//        int index3 = EnsureIndexInRange(cpi + 2);
+
+//        Vector3 plot = new Vector3();
+//        if ((cpi <= (cpEndIndex - order) && cpi >= 1) || ConnectedEnds) // middle
+//            plot = ToVector3(CalculateInnerCurvePoint(cp[index0], cp[index1], cp[index2], cp[index3], cpt));
+//        else
+//        {
+//            if (cpi < 1) // begining
+//                plot = ToVector3(CalculateBeginingCurvePoint(cp[index1], cp[index2], cp[index3], cpt));
+//            else // if (cpi > (cpLei - order)) // end
+//                plot = ToVector3(CalculateEndingCurvePoint(cp[index0], cp[index1], cp[index2], cpt));
+//        }
+//        return plot;
+//    }
+
+//    public int EnsureIndexInRange(int i)
+//    {
+//        while (i < 0)
+//            i = (cp.Length) + i;
+//        while (i > (cp.Length - 1))
+//            i = i - (cp.Length);
+//        return i;
+//    }
+
+//    Vector4 CalculateBeginingCurvePoint(Vector4 a0, Vector4 a1, Vector4 a2, float time)
+//    {
+//        return GetPointAtTimeOn2ndDegreePolynominalCurve(a0, a1, a2, (float)(time * .5f));
+//    }
+//    // ending segment
+//    Vector4 CalculateEndingCurvePoint(Vector4 a0, Vector4 a1, Vector4 a2, float time)
+//    {
+//        return GetPointAtTimeOn2ndDegreePolynominalCurve(a0, a1, a2, (float)(time * .5f + .5f));
+//    }
+//    // middle segments
+//    Vector4 CalculateInnerCurvePoint(Vector4 a0, Vector4 a1, Vector4 a2, Vector4 a3, float time)
+//    {
+//        Vector4 b0 = a1; Vector4 b1 = a2; Vector4 b2 = a3;
+//        Vector4 a = GetPointAtTimeOn2ndDegreePolynominalCurve(a0, a1, a2, (float)(time * .5f + .5f));
+//        Vector4 b = GetPointAtTimeOn2ndDegreePolynominalCurve(b0, b1, b2, (float)(time * .5f));
+//        return (a * (1f - time) + b * time);
+//    }
+
+//    /* primary calculations */
+
+//    /// <summary>
+//    /// This is a specialized imbalanced function based on a 2nd degree polynominal function.
+//    /// </summary>
+//    Vector4 GetPointAtTimeOn2ndDegreePolynominalCurve(Vector4 A, Vector4 B, Vector4 C, float t)
+//    {
+//        //Calculate Artificial Spline Point
+//        var S = (((B - C) + B) + ((B - A) + B)) * .5f;
+//        //var S = CalculateProportionalArtificialSplinePoint(A, B, C); // original
+//        //var S = CalculateNormalizedArtificialSplinePoint(A, B, C);
+//        float i = 1.0f - t;
+//        Vector4 plot = A * (i * i) + S * 2f * (i * t) + C * (t * t);
+//        // linear
+//        Vector4 plot2 = new Vector4();
+//        if (t <= .5f)
+//            plot2 = A + (B - A) * (t * 2f);
+//        else
+//            plot2 = B + (C - B) * ((t - .5f) * 2f);
+//        // below 1 the curve begins to straighten.
+//        plot.W = DefaultWeight;
+//        Vector4 finalPlot = (plot * (plot2.W)) + (plot2 * (1f - plot2.W));
+//        return finalPlot;
+//    }
+
+//    Vector4 CalculateProportionalArtificialSplinePoint(Vector4 A, Vector4 B, Vector4 C)
+//    {
+//        return (((B - C) + B) + ((B - A) + B)) * .5f;
+//    }
+
+//    // testing method
+//    Vector4 CalculateNormalizedArtificialSplinePoint(Vector4 A, Vector4 B, Vector4 C)
+//    {
+//        Vector3 p0 = new Vector3(A.X, A.Y, A.Z);
+//        Vector3 p1 = new Vector3(B.X, B.Y, B.Z);
+//        Vector3 p2 = new Vector3(C.X, C.Y, C.Z);
+//        //
+//        Vector3 invtemp0 = (p1 - p2);// + p1;
+//        Vector3 invtemp2 = (p1 - p0);// + p1;
+//        float invdist0 = invtemp0.Length();
+//        float invdist2 = invtemp2.Length();
+//        float avgdist = (invdist0 + invdist2) * .5f;
+//        invtemp0.Normalize();
+//        invtemp2.Normalize();
+//        //
+//        invtemp0 = invtemp0 * (avgdist);
+//        invtemp2 = invtemp2 * (avgdist);
+//        Vector3 g = (invtemp0 + invtemp2) * .5f + p1;
+//        return new Vector4(g.X, g.Y, g.Z, B.W);
+//    }
+
+//    float Interpolate(float v0, float v1, float timeX)
+//    {
+//        return ((v1 - v0) * timeX + v0);
+//    }
+//    float Frac(float n)
+//    {
+//        var i = (int)(n);
+//        return n - (float)(i);
+//    }
+//    public Vector3 ToVector3(Vector4 v)
+//    {
+//        return new Vector3(v.X, v.Y, v.Z);
+//    }
+
+//    public class LineSegment
+//    {
+//        public Vector3 Start { get; set; }
+//        public Vector3 End { get; set; }
+//        public LineSegment(Vector3 start, Vector3 end)
+//        {
+//            Start = start;
+//            End = end;
+//        }
+//    }
+//}

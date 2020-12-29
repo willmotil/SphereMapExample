@@ -73,8 +73,13 @@ namespace SphereMapExample
 
         //private DemoCamera _cameraSpritebatch;
         private DemoCamera _cameraCinematic;
-        private static float Range = 40.0f;
-        private Vector3[] _cameraWayPoints = new Vector3[] { new Vector3(-Range, 15, 5), new Vector3(0, 0, -Range), new Vector3(Range, 0, 5), new Vector3(0, -15, Range) };
+
+        private static float Range = 28.0f;
+
+        private Vector4[] _cameraWayPoints = new Vector4[] 
+        { 
+            new Vector4(-Range, 0, 0, 1f), new Vector4(0, 0, -Range, 1f), new Vector4(Range, 0, 0, 1f), new Vector4(0, 0, Range , 1f) 
+        };
         private bool _useDemoWaypoints = false;
         private Vector3 _targetLookAt = new Vector3(0, 0, 0);
 
@@ -152,7 +157,9 @@ namespace SphereMapExample
             _cameraCinematic = new DemoCamera(GraphicsDevice, _spriteBatch, null, new Vector3(0, 0, 0), Vector3.Forward, Vector3.Up, 0.01f, 10000f, f90, true, false, false);
             _cameraCinematic.WayPointCycleDurationInTotalSeconds = 30f;
             _cameraCinematic.MovementSpeedPerSecond = 8f;
-            _cameraCinematic.SetWayPoints(_cameraWayPoints, true, 30);
+            _cameraCinematic.SetWayPoints(_cameraWayPoints, true, true, 30);
+            _cameraCinematic.UseForwardPathLook = true;
+            _cameraCinematic.UseWayPointMotion = true;
 
             Orthographic(GraphicsDevice);
         }
@@ -174,13 +181,6 @@ namespace SphereMapExample
             skySphere = new PrimitiveSphere(200, 200, 25f, true, false, true, _sphericalTexture2DHeightMap, 5f);
             //++++++++++++++++++++++++++++++++++++++++++++++++++++++++
         }
-
-        //public void CreatePrimitiveSceneCubes()
-        //{
-        //    skyCube = new PrimitiveCube(1000, true, false, true);
-        //    for (int i = 0; i < 5; i++)
-        //        cubes[i] = new PrimitiveCube(1, false, false, true);
-        //}
 
         public void CreateSphericalArraysAndCubeMapTextures()
         {
@@ -267,7 +267,10 @@ namespace SphereMapExample
                 elapsedTenSecond -= 1f;
 
             if (IsPressedWithDelay(Keys.Space, gameTime))
-                _useDemoWaypoints = !_useDemoWaypoints;
+                _cameraCinematic.UseWayPointMotion = ! _cameraCinematic.UseWayPointMotion;
+
+            if (IsPressedWithDelay(Keys.Tab, gameTime))
+                _cameraCinematic.UseForwardPathLook = !_cameraCinematic.UseForwardPathLook;
 
             if (IsPressedWithDelay(Keys.F1, gameTime))
                 _whichCubeMapToDraw -= 1;
@@ -307,13 +310,13 @@ namespace SphereMapExample
                 _cpuCalculatedHeightData = !_cpuCalculatedHeightData;
 
 
-
             if (_whichCubeMapToDraw > 2)
                 _whichCubeMapToDraw = 0;
             if (_whichCubeMapToDraw < 0)
                 _whichCubeMapToDraw = 2;
 
-            _cameraCinematic.Update(_targetLookAt, _useDemoWaypoints, gameTime);
+            //_cameraCinematic.Update(_targetLookAt, _useDemoWaypoints, gameTime);
+            _cameraCinematic.Update(_targetLookAt,  gameTime);
 
             msg =
             $"\n Camera.World.Translation: \n  { _cameraCinematic.World.Translation.X.ToString("N3") } { _cameraCinematic.World.Translation.Y.ToString("N3") } { _cameraCinematic.World.Translation.Z.ToString("N3") }" +
@@ -328,7 +331,8 @@ namespace SphereMapExample
             $"\n F6 - Rebuild and time EnvIlluminationMap " +
             $"\n F7 - save " +
             $"\n F8 - CpuCalculatedHeightDataElseGpu: {_cpuCalculatedHeightData} " +
-            $"\n SpaceBar - Camera toggle manual or waypoint " +
+            $"\n SpaceBar - Camera toggle waypoint {_cameraCinematic.UseWayPointMotion}" +
+            $"\n Tab - Camera toggle waypoint look {_cameraCinematic.UseForwardPathLook}" +
             $"\n Q thru C + arrow keys - Manual Camera Control"
             ;
 
