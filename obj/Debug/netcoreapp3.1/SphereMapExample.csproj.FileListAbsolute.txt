@@ -115,7 +115,6 @@ C:\Users\will\MainFiles\GitPrjs\SphereMapExample\bin\Debug\netcoreapp3.1\runtime
 C:\Users\will\MainFiles\GitPrjs\SphereMapExample\bin\Debug\netcoreapp3.1\runtimes\win7-arm\native\libuv.dll
 C:\Users\will\MainFiles\GitPrjs\SphereMapExample\bin\Debug\netcoreapp3.1\runtimes\win7-x64\native\libuv.dll
 C:\Users\will\MainFiles\GitPrjs\SphereMapExample\bin\Debug\netcoreapp3.1\runtimes\win7-x86\native\libuv.dll
-C:\Users\will\MainFiles\GitPrjs\SphereMapExample\obj\Debug\netcoreapp3.1\SphereMapExample.csprojAssemblyReference.cache
 C:\Users\will\MainFiles\GitPrjs\SphereMapExample\obj\Debug\netcoreapp3.1\SphereMapExample.AssemblyInfoInputs.cache
 C:\Users\will\MainFiles\GitPrjs\SphereMapExample\obj\Debug\netcoreapp3.1\SphereMapExample.AssemblyInfo.cs
 C:\Users\will\MainFiles\GitPrjs\SphereMapExample\obj\Debug\netcoreapp3.1\SphereMapExample.csproj.CoreCompileInputs.cache
@@ -123,3 +122,4 @@ C:\Users\will\MainFiles\GitPrjs\SphereMapExample\obj\Debug\netcoreapp3.1\SphereM
 C:\Users\will\MainFiles\GitPrjs\SphereMapExample\obj\Debug\netcoreapp3.1\SphereMapExample.dll
 C:\Users\will\MainFiles\GitPrjs\SphereMapExample\obj\Debug\netcoreapp3.1\SphereMapExample.pdb
 C:\Users\will\MainFiles\GitPrjs\SphereMapExample\obj\Debug\netcoreapp3.1\SphereMapExample.genruntimeconfig.cache
+C:\Users\will\MainFiles\GitPrjs\SphereMapExample\obj\Debug\netcoreapp3.1\SphereMapExample.csprojAssemblyReference.cache

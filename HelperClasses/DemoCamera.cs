@@ -860,7 +860,8 @@ namespace Microsoft.Xna.Framework
                 }
             }
             currentCpIndex = index1;
-            return GetSegmentsTangentalWeightedPoint(cps[index0].position, cps[index1].position, cps[index2].position, cps[index3].position, fracTime);
+            //return GetSegmentsTangentalWeightedPoint(cps[index0].position, cps[index1].position, cps[index2].position, cps[index3].position, fracTime);
+            return GetSegmentV1V2TangentalWeightedPointThruVector(cps[index0].position, cps[index1].position, cps[index2].position, cps[index3].position, cps[index1].weight, cps[index2].weight, fracTime);
         }
         public int EnsureIndexInRange(int i)
         {
@@ -872,24 +873,24 @@ namespace Microsoft.Xna.Framework
         }
 
         /// <summary>
-        /// Here we go.
+        /// This is a generalized 3rd degree polynominal non uniform segment with curvature along that segment affected by the weights the curve intersects all the vectors more importantly vectors 1 and 2. 
+        /// This function relys on the GetIdealTangentVector function.
         /// </summary>
         /// <returns></returns>
-        private Vector3 GetSegmentsTangentalWeightedPoint(Vector3 v0, Vector3 v1, Vector3 v2, Vector3 v3, float time)
+        private Vector3 GetSegmentV1V2TangentalWeightedPointThruVector(Vector3 v0, Vector3 v1, Vector3 v2, Vector3 v3, float vector1Weight, float vector2Weight, float time)
         {
             Vector3 p0 = v0; Vector3 p1 = v1; Vector3 p2 = v2; Vector3 p3 = v3;
 
-            var segmentDistance = Vector3.Distance(v2, v1) * 0.35355339f; // * _weight;
+            var segmentDistance = Vector3.Distance(v2, v1) * 0.35355339f;
 
             var n1 = Vector3.Normalize(GetIdealTangentVector(v0, v1, v2));
-            p1 = v1 + n1 * segmentDistance * cps[index1].weight;
+            p1 = v1 + n1 * segmentDistance * vector1Weight;
             p0 = v1;
 
             var n2 = Vector3.Normalize(GetIdealTangentVector(v3, v2, v1));
-            p2 = v2 + n2 * segmentDistance * cps[index2].weight;
+            p2 = v2 + n2 * segmentDistance * vector2Weight;
             p3 = v2;
 
-            //float t = time * .33f + .33f;
             float t = time;
             float t2 = t * t;
             float t3 = t2 * t;
@@ -903,29 +904,17 @@ namespace Microsoft.Xna.Framework
                 (i * t2) * 3f * p2 +
                 (t3) * 1f * p3;
 
-            //artificialCpLine.Add(p0);  // visualization stuff.
-            //artificialCpLine.Add(p1);
-            //artificialCpLine.Add(p2);
-            //artificialCpLine.Add(p3);
-
             return result;
         }
 
         public Vector3 GetIdealTangentVector(Vector3 a, Vector3 b, Vector3 c)
         {
             float disa = Vector3.Distance(a, b);
-            float disc = Vector3.Distance(b, c);
-            float ratioa = disa / (disa + disc);
-            var pAB = ((b - a) * ratioa) + a;
-            var pBC = ((c - b) * ratioa) + b;
-            var result = pBC - pAB;
+            float ratioa = disa / (disa + Vector3.Distance(b, c));
+            var result = (((c - b) * ratioa) + b) - (((b - a) * ratioa) + a);
             // prevent nan later on.
             if (result == Vector3.Zero)
                 result = c - a;
-
-            //artificialTangentLine.Add(pAB); // visualization stuff.
-            //artificialTangentLine.Add(pBC);
-
             return result;
         }
 

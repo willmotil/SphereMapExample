@@ -235,7 +235,7 @@ float2 NormalToUvFace(float3 v, out int faceIndex)
     float2 uv;
     if (vAbs.z >= vAbs.x && vAbs.z >= vAbs.y)
     {
-        faceIndex = v.z < 0.0 ? 5 : 4; // Right , left _  //FACE_FRONT : FACE_BACK;   // z major axis.  we designate negative z forward.
+        faceIndex = v.z < 0.0 ? 5 : 4; // Right , left _  //FACE_FRONT : FACE_BACK;   // z major axis...  we designate negative z forward.
         ma = 0.5f / vAbs.z;
         uv = float2(v.z < 0.0f ? -v.x : v.x, -v.y);
     }
